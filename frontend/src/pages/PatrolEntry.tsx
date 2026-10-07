@@ -166,7 +166,16 @@ export default function PatrolEntry() {
       render: (_value, record) => {
         const point = stationStore.points.find((item) => item.id === record.pointId)
         if (!point) return <Tag>—</Tag>
-        return <AbnormalTag level={patrolStore.judge(point, record.value).level} size="small" />
+        return (
+          <Space size={4}>
+            <AbnormalTag level={patrolStore.judge(point, record.value).level} size="small" />
+            {record.judgeBasis === '临时安全区间' ? (
+              <Tag color="purple" size="small">
+                旁通临时区间
+              </Tag>
+            ) : null}
+          </Space>
+        )
       }
     },
     { title: '备注', dataIndex: 'note', width: 200, render: (value: string) => value || '—' },

@@ -11,6 +11,7 @@ import {
   deleteDeviceCascade,
   deletePointCascade,
   deleteStationCascade,
+  findOpenBypassOfDevice,
   readUiPrefs,
   recalculateReadingsOfPoint,
   writeUiPrefs,
@@ -158,6 +159,11 @@ export const useStationStore = create<StationState>((set, get) => ({
   },
 
   async removeDevice(id) {
+    // 设备存在未归档旁通作业时禁止删除，避免作业台账与现场批次失联
+    const open = await findOpenBypassOfDevice(id)
+    if (open) {
+      throw new Error(`设备存在未归档旁通作业 ${open.code}，请先结束并归档后再删除`)
+    }
     await deleteDeviceCascade(id)
   },
 

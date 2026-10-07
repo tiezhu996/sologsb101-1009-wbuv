@@ -33,15 +33,18 @@ import {
   readLastBackupAt,
   readStampedDbVersion,
   resetDatabase,
+  type BypassRow,
   type ReadingRow
 } from '@/utils/db'
 import { PATROL_STATES, type Patrol, type PatrolGap, type PatrolState } from '@/types/patrol'
-import { exportReadingCsv, exportStructureVersion } from '@/utils/export'
+import { exportBypassCsv, exportReadingCsv, exportStructureVersion } from '@/utils/export'
 
 export default function PlanList() {
   const stationStore = useStationStore()
   const patrolStore = usePatrolStore()
   const readingTable = useIdbTable<ReadingRow>(db.readings, { sortByUpdatedAt: false })
+  const bypassTable = useIdbTable<BypassRow>(db.bypasses, { sortByUpdatedAt: false })
+  const leakTable = useIdbTable<import('@/utils/db').LeakRow>(db.leaks, { sortByUpdatedAt: false })
 
   const [planForm] = Form.useForm<{ stationIds: string[]; planDate: string; patrolman: string }>()
   const [planOpen, setPlanOpen] = useState(false)
@@ -138,7 +141,19 @@ export default function PlanList() {
       stationStore.devices,
       stationStore.points,
       patrolStore.patrols,
-      readingTable.rows
+      readingTable.rows,
+      bypassTable.rows
+    )
+    Message.success(`已导出 ${filename}`)
+  }
+
+  const exportBypasses = (): void => {
+    const filename = exportBypassCsv(
+      stationStore.stations,
+      stationStore.devices,
+      bypassTable.rows,
+      readingTable.rows,
+      leakTable.rows
     )
     Message.success(`已导出 ${filename}`)
   }
@@ -252,6 +267,7 @@ export default function PlanList() {
         </div>
         <div className="page-head__actions">
           <Button onClick={exportReadings}>导出读数台账 CSV</Button>
+          <Button onClick={exportBypasses}>导出旁通作业台账 CSV</Button>
           <Button onClick={exportStructure}>导出结构版本</Button>
           <Button onClick={exportJson}>导出全量 JSON</Button>
           <Button type="primary" onClick={openPlan}>

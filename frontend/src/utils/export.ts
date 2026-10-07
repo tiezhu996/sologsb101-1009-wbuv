@@ -7,6 +7,7 @@ import type { Point } from '@/types/point'
 import type { Patrol } from '@/types/patrol'
 import type { Reading } from '@/types/reading'
 import type { Leak } from '@/types/leak'
+import type { Bypass } from '@/types/bypass'
 import { abnormalLevelOf, deviationPctOf, formatLeakConcentration } from '@/utils/range'
 
 export function download(filename: string, content: string, mime: string): void {
@@ -44,7 +45,8 @@ export function exportReadingCsv(
   devices: Device[],
   points: Point[],
   patrols: Patrol[],
-  readings: Reading[]
+  readings: Reading[],
+  bypasses: Bypass[] = []
 ): string {
   const header = [
     '调压站',
@@ -61,30 +63,46 @@ export function exportReadingCsv(
     '读数',
     '偏差率(%)',
     '判定',
+    '判级依据',
+    '判定下限',
+    '判定上限',
+    '旁通作业单号',
+    '记录时间',
+    '现场记录人',
+    '台账状态',
     '备注'
   ]
   const lines: string[] = [header.map(csvCell).join(',')]
+  const bypassById = new Map(bypasses.map((bypass) => [bypass.id, bypass]))
   readings.forEach((reading) => {
     const point = points.find((item) => item.id === reading.pointId)
     const patrol = patrols.find((item) => item.id === reading.patrolId)
     const device = point ? devices.find((item) => item.id === point.deviceId) : undefined
     const station = patrol ? stations.find((item) => item.id === patrol.stationId) : undefined
+    const bypass = reading.bypassId ? bypassById.get(reading.bypassId) : undefined
     lines.push(
       [
-        station ? station.name : '—',
+        station ? station.name : bypass ? stations.find((item) => item.id === bypass.stationId)?.name ?? '—' : '—',
         device ? `${device.type} ${device.model}` : '—',
         point ? point.name : '—',
         point ? point.standardMin : '—',
         point ? point.standardMax : '—',
         point ? point.unit : '—',
         point ? (point.isCritical ? '是' : '否') : '—',
-        patrol ? patrol.planDate : '—',
-        patrol ? patrol.patrolDate || '未执行' : '—',
-        patrol ? patrol.patrolman || '—' : '—',
-        patrol ? patrol.state : '—',
+        patrol ? patrol.planDate : bypass ? bypass.startTime.slice(0, 10) : '—',
+        patrol ? patrol.patrolDate || '未执行' : bypass ? bypass.startTime.slice(0, 10) : '—',
+        patrol ? patrol.patrolman || '—' : bypass ? bypass.recorder || '—' : '—',
+        patrol ? patrol.state : bypass ? '旁通作业' : '—',
         reading.value,
         reading.deviationPct.toFixed(2),
         point ? abnormalLevelOf(reading.deviationPct, point.isCritical) : '—',
+        reading.judgeBasis,
+        reading.judgeMin,
+        reading.judgeMax,
+        bypass ? bypass.code : '—',
+        reading.recordedAt ? new Date(reading.recordedAt).toISOString().replace('T', ' ').slice(0, 16) : '—',
+        reading.recorder || '—',
+        reading.ledgerState,
         reading.note || '—'
       ]
         .map(csvCell)
@@ -97,9 +115,10 @@ export function exportReadingCsv(
 }
 
 /** 泄漏处置台账 CSV */
-export function exportLeakCsv(stations: Station[], devices: Device[], leaks: Leak[]): string {
-  const header = ['调压站', '设备', '出厂编号', '浓度(ppm)', '发现时间', '处置措施', '状态', '复检值(ppm)', '复检结论', '处置人']
+export function exportLeakCsv(stations: Station[], devices: Device[], leaks: Leak[], bypasses: Bypass[] = []): string {
+  const header = ['调压站', '设备', '出厂编号', '浓度(ppm)', '发现时间', '处置措施', '状态', '复检值(ppm)', '复检结论', '处置人', '判级依据', '来源旁通作业', '来源读数']
   const lines: string[] = [header.map(csvCell).join(',')]
+  const bypassById = new Map(bypasses.map((bypass) => [bypass.id, bypass]))
   leaks.forEach((leak) => {
     const device = devices.find((item) => item.id === leak.deviceId)
     const station = stations.find((item) => item.id === leak.stationId)
@@ -115,7 +134,10 @@ export function exportLeakCsv(stations: Station[], devices: Device[], leaks: Lea
         leak.state,
         leak.retestValuePpm,
         leak.state === '已复检' ? (pass ? '合格' : '不合格') : '未复检',
-        leak.handler || '—'
+        leak.handler || '—',
+        leak.judgeBasis,
+        leak.bypassId ? bypassById.get(leak.bypassId)?.code ?? leak.bypassId : '—',
+        leak.sourceReadingId || '—'
       ]
         .map(csvCell)
         .join(',')
@@ -123,6 +145,77 @@ export function exportLeakCsv(stations: Station[], devices: Device[], leaks: Lea
   })
   const filename = `泄漏处置台账-${stampSuffix()}.csv`
   download(filename, `\uFEFF${lines.join('\n')}`, 'text/csv;charset=utf-8')
+  return filename
+}
+
+/** 旁通作业台账 CSV：作业单、临时区间、判级依据、读数/泄漏单与处置结果全链路追溯 */
+export function exportBypassCsv(
+  stations: Station[],
+  devices: Device[],
+  bypasses: Bypass[],
+  readings: Reading[],
+  leaks: Leak[]
+): string {
+  const header = [
+    '作业单号',
+    '状态',
+    '调压站',
+    '设备',
+    '负责人',
+    '现场记录人',
+    '作业事由',
+    '开始时间',
+    '许可截止',
+    '实际结束',
+    '临时下限',
+    '临时上限(安全线)',
+    '单位',
+    '读数条数',
+    '异常条数',
+    '越线条数',
+    '泄漏单数',
+    '重试次数',
+    '台账核对',
+    '台账错误',
+    '处置结果'
+  ]
+  const lines: string[] = [header.map(csvCell).join(',')]
+  bypasses.forEach((bypass) => {
+    const station = stations.find((item) => item.id === bypass.stationId)
+    const device = devices.find((item) => item.id === bypass.deviceId)
+    const ownReadings = readings.filter((reading) => reading.bypassId === bypass.id)
+    const ownLeaks = leaks.filter((leak) => leak.bypassId === bypass.id)
+    const overLimit = ownReadings.filter((reading) => reading.value > bypass.safeMax).length
+    lines.push(
+      [
+        bypass.code,
+        bypass.state,
+        station ? station.name : '—',
+        device ? `${device.type} ${device.model}` : '—',
+        bypass.leader || '—',
+        bypass.recorder || '—',
+        bypass.reason || '—',
+        bypass.startTime.replace('T', ' '),
+        bypass.endTime.replace('T', ' '),
+        bypass.finishedAt ? bypass.finishedAt.replace('T', ' ') : '未结束',
+        bypass.safeMin,
+        bypass.safeMax,
+        bypass.safeUnit,
+        ownReadings.length,
+        ownReadings.filter((reading) => reading.isAbnormal).length,
+        overLimit,
+        ownLeaks.length,
+        bypass.retryCount,
+        bypass.archiveState,
+        bypass.archiveError || '—',
+        bypass.conclusion || '—'
+      ]
+        .map(csvCell)
+        .join(',')
+    )
+  })
+  const filename = `旁通作业台账-${stampSuffix()}.csv`
+  download(filename, `﻿${lines.join('\n')}`, 'text/csv;charset=utf-8')
   return filename
 }
 

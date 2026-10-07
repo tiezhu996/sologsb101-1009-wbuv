@@ -19,6 +19,12 @@ export interface AbnormalRow {
   point: Point | null
   level: AbnormalLevel
   weight: number
+  /** 判级依据：旁通作业期为临时安全区间，否则为平时标准区间 */
+  basis: '临时安全区间' | '平时标准区间'
+  /** 归属旁通作业 id（作业期读数） */
+  bypassId: string
+  /** 该读数已派泄漏单（不重复派） */
+  dispatched: boolean
 }
 
 interface PatrolState_ {
@@ -188,6 +194,14 @@ export const usePatrolStore = create<PatrolState_>((set, get) => ({
         isAbnormal: judgement.isAbnormal,
         deviationPct: judgement.deviationPct,
         note: found ? found.note : '',
+        bypassId: found?.bypassId ?? '',
+        judgeBasis: found?.judgeBasis ?? '平时标准区间',
+        judgeMin: found?.judgeMin ?? point.standardMin,
+        judgeMax: found?.judgeMax ?? point.standardMax,
+        recordedAt: found?.recordedAt ?? now,
+        recorder: found?.recorder ?? '',
+        ledgerState: found?.ledgerState ?? '已入账',
+        leakId: found?.leakId ?? '',
         createdAt: found ? found.createdAt : now,
         updatedAt: now
       })
@@ -237,7 +251,10 @@ export const usePatrolStore = create<PatrolState_>((set, get) => ({
           patrol,
           point,
           level,
-          weight: point ? abnormalWeight(level, point.isCritical) : 20
+          weight: point ? abnormalWeight(level, point.isCritical) : 20,
+          basis: (reading.judgeBasis === '临时安全区间' ? '临时安全区间' : '平时标准区间') as AbnormalRow['basis'],
+          bypassId: reading.bypassId ?? '',
+          dispatched: Boolean(reading.leakId)
         }
       })
       .sort((a, b) => b.weight - a.weight || b.reading.deviationPct - a.reading.deviationPct)

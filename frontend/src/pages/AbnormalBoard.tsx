@@ -77,22 +77,27 @@ export default function AbnormalBoard() {
     if (point.unit === 'ppm') {
       const foundTime = row.patrol
         ? row.patrol.patrolDate || row.patrol.planDate
-        : new Date().toISOString().slice(0, 10)
-      if (leakStore.leaks.some((leak) => leak.deviceId === point.deviceId && leak.foundTime === foundTime)) {
+        : new Date(row.reading.recordedAt).toISOString().slice(0, 10)
+      if (row.dispatched) {
+        Message.info('该读数已派发过处置单，不重复派单')
+        return
+      }
+      if (leakStore.leaks.some((leak) => leak.deviceId === point.deviceId && leak.foundTime === foundTime && !leak.bypassId)) {
         Message.info('该设备当日已派发过处置单')
         return
       }
       const station = stationStore.stations.find((item) => item.id === point.stationId)
-      await leakStore.createFromAbnormal({
+      const { created } = await leakStore.dispatchFromReading({
+        readingId: row.reading.id,
         deviceId: point.deviceId,
         stationId: point.stationId,
         concentrationPpm: row.reading.value,
         foundTime,
-        measure: `${point.name} 实测 ${row.reading.value} ${point.unit}，偏差率 ${row.reading.deviationPct.toFixed(2)}%，${
+        measure: `${point.name} 实测 ${row.reading.value} ${point.unit}，按${row.basis}判定偏差率 ${row.reading.deviationPct.toFixed(2)}%，${
           station ? station.name : ''
         } 已派发处置单`
       })
-      Message.success('已派发泄漏处置单')
+      Message.success(created ? '已派发泄漏处置单' : '该读数已有处置单，未重复派单')
       return
     }
     await patrolStore.saveSingleReading(row.reading.patrolId, point, row.reading.value, '异常已确认并记录')
@@ -110,20 +115,24 @@ export default function AbnormalBoard() {
       const row = rows.find((item) => item.reading.id === key)
       if (!row || !row.point) continue
       if (row.point.unit === 'ppm') {
-        await leakStore.createFromAbnormal({
+        if (row.dispatched) continue
+        const { created } = await leakStore.dispatchFromReading({
+          readingId: row.reading.id,
           deviceId: row.point.deviceId,
           stationId: row.point.stationId,
           concentrationPpm: row.reading.value,
-          foundTime: row.patrol ? row.patrol.patrolDate || row.patrol.planDate : new Date().toISOString().slice(0, 10),
-          measure: `${row.point.name} 实测 ${row.reading.value} ppm，批量派单`
+          foundTime: row.patrol
+            ? row.patrol.patrolDate || row.patrol.planDate
+            : new Date(row.reading.recordedAt).toISOString().slice(0, 10),
+          measure: `${row.point.name} 实测 ${row.reading.value} ppm，按${row.basis}批量派单`
         })
-        leakCount += 1
+        if (created) leakCount += 1
       } else {
         await patrolStore.saveSingleReading(row.reading.patrolId, row.point, row.reading.value, '异常已批量确认')
         notedCount += 1
       }
     }
-    Message.success(`批量确认完成：派发处置单 ${leakCount} 张，记录确认 ${notedCount} 条`)
+    Message.success(`批量确认完成：派发处置单 ${leakCount} 张（已派单不重复），记录确认 ${notedCount} 条`)
     setSelectedKeys([])
   }
 
@@ -201,9 +210,28 @@ export default function AbnormalBoard() {
       )
     },
     {
+      title: '判级依据',
+      width: 150,
+      render: (_value, record) => (
+        <Space size={4} direction="vertical" align="start">
+          <Tag color={record.basis === '临时安全区间' ? 'purple' : 'gray'} size="small">
+            {record.basis}
+          </Tag>
+          {record.basis === '临时安全区间' ? (
+            <span className="muted" style={{ fontSize: 12 }}>
+              区间 {record.reading.judgeMin} ~ {record.reading.judgeMax}
+            </span>
+          ) : null}
+        </Space>
+      )
+    },
+    {
       title: '巡检日期',
       width: 120,
-      render: (_value, record) => record.patrol?.planDate ?? '—'
+      render: (_value, record) =>
+        record.bypassId
+          ? new Date(record.reading.recordedAt).toISOString().slice(0, 10)
+          : record.patrol?.planDate ?? '—'
     },
     {
       title: '备注',
@@ -215,8 +243,13 @@ export default function AbnormalBoard() {
       width: 280,
       render: (_value, record) => (
         <Space size={4}>
-          <Button type="text" size="small" onClick={() => confirm(record)}>
-            {record.point?.unit === 'ppm' ? '派发处置单' : '确认异常'}
+          <Button
+            type="text"
+            size="small"
+            disabled={record.point?.unit === 'ppm' && record.dispatched}
+            onClick={() => confirm(record)}
+          >
+            {record.point?.unit === 'ppm' ? (record.dispatched ? '已派单' : '派发处置单') : '确认异常'}
           </Button>
           <Button type="text" size="small" onClick={() => openFix(record)}>
             修正读数

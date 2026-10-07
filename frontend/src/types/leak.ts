@@ -15,6 +15,12 @@ export interface Leak {
   /** 复检浓度（ppm） */
   retestValuePpm: number
   handler: string
+  /** 来源旁通作业：作业期越过浓度安全线立即派单，非作业来源为空串 */
+  bypassId: string
+  /** 来源读数 id（追溯是哪条浓度读数触发的派单） */
+  sourceReadingId: string
+  /** 派单依据：临时安全区间 / 平时标准区间 */
+  judgeBasis: '临时安全区间' | '平时标准区间'
   createdAt: number
   updatedAt: number
 }

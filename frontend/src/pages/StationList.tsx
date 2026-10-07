@@ -160,8 +160,12 @@ export default function StationList() {
   }
 
   const removeDevice = async (device: Device): Promise<void> => {
-    await stationStore.removeDevice(device.id)
-    Message.success('设备及其点位、处置单已删除')
+    try {
+      await stationStore.removeDevice(device.id)
+      Message.success('设备及其点位、处置单已删除')
+    } catch (err) {
+      Message.error(err instanceof Error ? err.message : '设备删除失败')
+    }
   }
 
   const deviceColumns: TableColumnProps<Device>[] = [

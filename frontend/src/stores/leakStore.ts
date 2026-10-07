@@ -34,6 +34,15 @@ interface LeakState_ {
     foundTime: string
     measure: string
   }) => Promise<Leak>
+  /** 由异常读数幂等派单：该读数已派过则直接返回原单，不重复派单 */
+  dispatchFromReading: (payload: {
+    readingId: string
+    deviceId: string
+    stationId: string
+    concentrationPpm: number
+    foundTime: string
+    measure: string
+  }) => Promise<{ leak: Leak; created: boolean }>
   counts: () => Record<LeakState, number>
   closedPercent: () => number
   retestPassCount: () => number
@@ -72,6 +81,9 @@ export const useLeakStore = create<LeakState_>((set, get) => ({
       state: draft.state,
       retestValuePpm: Number(draft.retestValuePpm) || 0,
       handler: draft.handler.trim(),
+      bypassId: '',
+      sourceReadingId: '',
+      judgeBasis: '平时标准区间',
       createdAt: now,
       updatedAt: now
     }
@@ -118,7 +130,7 @@ export const useLeakStore = create<LeakState_>((set, get) => ({
   },
 
   async createFromAbnormal(payload) {
-    return get().createLeak({
+    const leak = await get().createLeak({
       deviceId: payload.deviceId,
       concentrationPpm: payload.concentrationPpm,
       foundTime: payload.foundTime,
@@ -127,6 +139,42 @@ export const useLeakStore = create<LeakState_>((set, get) => ({
       retestValuePpm: 0,
       handler: ''
     })
+    return leak
+  },
+
+  async dispatchFromReading(payload) {
+    // 幂等：该读数已派生过处置单（回填 leakId 或同 sourceReadingId），直接返回原单
+    const existing = get().leaks.find((leak) => leak.sourceReadingId === payload.readingId)
+    if (existing) return { leak: existing, created: false }
+    const source = await db.readings.get(payload.readingId)
+    if (source?.leakId) {
+      const linked = get().leaks.find((leak) => leak.id === source.leakId)
+      if (linked) return { leak: linked, created: false }
+    }
+    const device = await db.devices.get(payload.deviceId)
+    const now = Date.now()
+    const basis = source?.judgeBasis === '临时安全区间' ? '临时安全区间' : '平时标准区间'
+    const row: LeakRow = {
+      id: createId('lk'),
+      deviceId: payload.deviceId,
+      stationId: payload.stationId || (device ? device.stationId : ''),
+      concentrationPpm: Number(payload.concentrationPpm) || 0,
+      foundTime: payload.foundTime,
+      measure: payload.measure.trim(),
+      state: '待处置',
+      retestValuePpm: 0,
+      handler: '',
+      bypassId: source?.bypassId ?? '',
+      sourceReadingId: payload.readingId,
+      judgeBasis: basis,
+      createdAt: now,
+      updatedAt: now
+    }
+    await db.transaction('rw', [db.leaks, db.readings], async () => {
+      await db.leaks.put(row)
+      await db.readings.update(payload.readingId, { leakId: row.id, updatedAt: now })
+    })
+    return { leak: row, created: true }
   },
 
   counts() {

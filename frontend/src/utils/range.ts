@@ -96,6 +96,31 @@ export function judgeReading(value: number, min: number, max: number, isCritical
   }
 }
 
+/** 判级依据口径：旁通作业期用临时安全区间，平时用点位标准区间 */
+export type JudgeBasis = '临时安全区间' | '平时标准区间'
+
+/** 带判级依据与所用区间快照的判定结果（供旁通作业读数追溯） */
+export interface BasedReadingJudgement extends ReadingJudgement {
+  basis: JudgeBasis
+  judgeMin: number
+  judgeMax: number
+}
+
+/**
+ * 按指定区间判定读数，并记录判级依据与区间快照。
+ * 旁通作业期传入临时安全区间；许可到期前不得改用平时标准区间。
+ */
+export function judgeWithBasis(
+  value: number,
+  min: number,
+  max: number,
+  isCritical: boolean,
+  basis: JudgeBasis
+): BasedReadingJudgement {
+  const judgement = judgeReading(value, min, max, isCritical)
+  return { ...judgement, basis, judgeMin: min, judgeMax: max }
+}
+
 export function rangeText(min: number, max: number, unit: string): string {
   return `${min} ~ ${max} ${unit}`
 }

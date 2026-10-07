@@ -23,6 +23,7 @@ import FilterBar, { type FilterModel } from '@/components/common/FilterBar'
 import StatBadge from '@/components/common/StatBadge'
 import { useStationStore } from '@/stores/stationStore'
 import { useLeakStore } from '@/stores/leakStore'
+import { useBypassStore } from '@/stores/bypassStore'
 import {
   EMPTY_LEAK_DRAFT,
   LEAK_RETEST_PASS_PPM,
@@ -38,6 +39,7 @@ import { deviationPctOf, formatLeakConcentration } from '@/utils/range'
 export default function LeakBoard() {
   const stationStore = useStationStore()
   const leakStore = useLeakStore()
+  const bypassStore = useBypassStore()
 
   const [form] = Form.useForm<LeakDraft>()
   const [treatForm] = Form.useForm<{ handler: string; measure: string }>()
@@ -196,6 +198,26 @@ export default function LeakBoard() {
       )
     },
     { title: '发现时间', dataIndex: 'foundTime', width: 120 },
+    {
+      title: '来源 / 判据',
+      width: 170,
+      render: (_value, record) => {
+        if (!record.bypassId) {
+          return <Tag size="small">平时巡检 · 平时标准区间</Tag>
+        }
+        const bypass = bypassStore.bypasses.find((item) => item.id === record.bypassId)
+        return (
+          <Space size={4} direction="vertical" align="start">
+            <Tag color="purple" size="small">
+              旁通作业 {bypass?.code ?? record.bypassId}
+            </Tag>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {record.judgeBasis}
+            </span>
+          </Space>
+        )
+      }
+    },
     { title: '处置措施', dataIndex: 'measure', width: 240, render: (value: string) => value || '—' },
     {
       title: '状态',

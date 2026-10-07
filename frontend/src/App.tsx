@@ -7,6 +7,7 @@ import { ROUTES } from './router'
 import { useStationStore } from './stores/stationStore'
 import { usePatrolStore } from './stores/patrolStore'
 import { useLeakStore } from './stores/leakStore'
+import { useBypassStore } from './stores/bypassStore'
 import { usePatrolGap } from './hooks/usePatrolGap'
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
   const stationStore = useStationStore()
   const patrolStore = usePatrolStore()
   const leakStore = useLeakStore()
+  const bypassStore = useBypassStore()
   const gap = usePatrolGap(patrolStore.patrols)
 
   const currentStation = stationStore.currentStation()
@@ -24,6 +26,7 @@ export default function App() {
     { path: ROUTES.points, label: '点位配置', count: stationStore.points.length },
     { path: ROUTES.patrols, label: '巡检录入', count: patrolStore.patrols.length },
     { path: ROUTES.abnormal, label: '异常分级', count: patrolStore.abnormalRows().length },
+    { path: ROUTES.bypasses, label: '旁通作业', count: bypassStore.bypasses.filter((item) => item.state !== '已归档').length },
     { path: ROUTES.leaks, label: '泄漏处置', count: leakStore.counts()['待处置'] },
     { path: ROUTES.plans, label: '巡检计划', count: gap.overdueCount }
   ]
@@ -95,7 +98,8 @@ export default function App() {
         <span>数据仅保存于本机浏览器（IndexedDB / localStorage），不上传任何服务器。</span>
         <span>
           调压站 {stationStore.stations.length} 座 · 设备 {stationStore.devices.length} 台 · 点位 {stationStore.points.length} 个 ·
-          巡检 {patrolStore.patrols.length} 次 · 读数 {patrolStore.readings.length} 条 · 超期未检 {gap.overdueCount} 次
+          巡检 {patrolStore.patrols.length} 次 · 读数 {patrolStore.readings.length} 条 · 旁通作业 {bypassStore.bypasses.length} 项 ·
+          超期未检 {gap.overdueCount} 次
         </span>
       </footer>
     </div>
