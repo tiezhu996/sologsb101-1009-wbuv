@@ -229,15 +229,19 @@ export const usePatrolStore = create<PatrolState_>((set, get) => ({
       .map((reading) => {
         const point = points.find((item) => item.id === reading.pointId) ?? null
         const patrol = get().patrols.find((item) => item.id === reading.patrolId) ?? null
-        const level: AbnormalLevel = point
-          ? abnormalLevelOf(reading.deviationPct, point.isCritical)
-          : '轻微超标'
+        // 旁通作业读数按录入时冻结的临时区间判级（标准值变更不回改）；其余按点位标准区间
+        const isCritical = reading.judgeBasis?.isCritical ?? point?.isCritical ?? false
+        const level: AbnormalLevel = reading.bypassWorkId
+          ? abnormalLevelOf(reading.deviationPct, isCritical)
+          : point
+            ? abnormalLevelOf(reading.deviationPct, point.isCritical)
+            : '轻微超标'
         return {
           reading,
           patrol,
           point,
           level,
-          weight: point ? abnormalWeight(level, point.isCritical) : 20
+          weight: point || reading.judgeBasis ? abnormalWeight(level, isCritical) : 20
         }
       })
       .sort((a, b) => b.weight - a.weight || b.reading.deviationPct - a.reading.deviationPct)

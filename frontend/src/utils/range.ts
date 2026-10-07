@@ -140,3 +140,50 @@ export function formatLeakConcentration(ppm: number): string {
   if (!Number.isFinite(ppm)) return '—'
   return `${ppm.toFixed(0)} ppm`
 }
+
+/* ============================ 时间窗（旁通作业许可期） ============================ */
+
+/** 解析 `YYYY-MM-DD HH:mm[:ss]` 为毫秒时间戳，非法返回 NaN */
+export function parseDateTime(text: string): number {
+  const trimmed = text.trim()
+  if (!trimmed) return NaN
+  return Date.parse(trimmed.replace(' ', 'T'))
+}
+
+const pad2 = (value: number): string => String(value).padStart(2, '0')
+
+/** 格式化为 `YYYY-MM-DD HH:mm` */
+export function formatDateTime(ms: number): string {
+  if (!Number.isFinite(ms)) return '—'
+  const date = new Date(ms)
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(
+    date.getMinutes()
+  )}`
+}
+
+/** 格式化为 `YYYY-MM-DD` */
+export function formatDate(ms: number): string {
+  if (!Number.isFinite(ms)) return '—'
+  const date = new Date(ms)
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+/** 时刻是否落在许可时间窗 [startAt, endAt] 内 */
+export function inTimeWindow(at: number, startAt: number, endAt: number): boolean {
+  return Number.isFinite(at) && at >= startAt && at <= endAt
+}
+
+/** 许可剩余分钟数（已到期为负数） */
+export function remainingMinutes(endAt: number, now: number = Date.now()): number {
+  return Math.round((endAt - now) / 60000)
+}
+
+/** 许可剩余时间文案 */
+export function remainingText(endAt: number, now: number = Date.now()): string {
+  const minutes = remainingMinutes(endAt, now)
+  if (minutes < 0) return `已到期 ${Math.abs(minutes)} 分钟`
+  if (minutes < 60) return `剩余 ${minutes} 分钟`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return `剩余 ${hours} 小时 ${rest} 分`
+}

@@ -19,6 +19,7 @@ import {
 } from '@arco-design/web-react'
 import type { TableColumnProps } from '@arco-design/web-react'
 import AbnormalTag from '@/components/common/AbnormalTag'
+import BasisTag from '@/components/common/BasisTag'
 import EmptyPanel from '@/components/common/EmptyPanel'
 import FilterBar, { type FilterModel } from '@/components/common/FilterBar'
 import StatBadge from '@/components/common/StatBadge'
@@ -74,6 +75,16 @@ export default function AbnormalBoard() {
   const confirm = async (row: AbnormalRow): Promise<void> => {
     const point = row.point
     if (!point) return
+    // 旁通作业期浓度越线已在录数时立即派单（幂等键 sourceReadingId），这里只做核对不重复派
+    if (row.reading.bypassWorkId) {
+      const linked = leakStore.leaks.some((leak) => leak.sourceReadingId === row.reading.id)
+      if (point.unit === 'ppm' && linked) {
+        Message.info('该旁通作业读数越线时已立即派发处置单，不重复派单')
+        return
+      }
+      Message.info('旁通作业期读数按临时安全区间判定，请在旁通作业页结束时统一核对归档')
+      return
+    }
     if (point.unit === 'ppm') {
       const foundTime = row.patrol
         ? row.patrol.patrolDate || row.patrol.planDate
@@ -106,9 +117,15 @@ export default function AbnormalBoard() {
     }
     let leakCount = 0
     let notedCount = 0
+    let skippedBypass = 0
     for (const key of selectedKeys) {
       const row = rows.find((item) => item.reading.id === key)
       if (!row || !row.point) continue
+      // 旁通作业读数由作业流程判级/派单/归档，批量确认时跳过，避免旧读数补派泄漏单
+      if (row.reading.bypassWorkId) {
+        skippedBypass += 1
+        continue
+      }
       if (row.point.unit === 'ppm') {
         await leakStore.createFromAbnormal({
           deviceId: row.point.deviceId,
@@ -123,7 +140,9 @@ export default function AbnormalBoard() {
         notedCount += 1
       }
     }
-    Message.success(`批量确认完成：派发处置单 ${leakCount} 张，记录确认 ${notedCount} 条`)
+    Message.success(
+      `批量确认完成：派发处置单 ${leakCount} 张，记录确认 ${notedCount} 条${skippedBypass ? `，跳过旁通作业读数 ${skippedBypass} 条（按作业流程处理）` : ''}`
+    )
     setSelectedKeys([])
   }
 
@@ -198,6 +217,16 @@ export default function AbnormalBoard() {
       width: 170,
       render: (_value, record) => (
         <AbnormalTag level={record.level} deviationPct={record.reading.deviationPct} size="small" />
+      )
+    },
+    {
+      title: '判级依据',
+      width: 170,
+      render: (_value, record) => (
+        <Space size={4} direction="vertical">
+          <BasisTag basis={record.reading.judgeBasis} />
+          {record.reading.bypassWorkId ? <Tag color="purple" size="small">旁通作业期读数</Tag> : null}
+        </Space>
       )
     },
     {
@@ -285,7 +314,7 @@ export default function AbnormalBoard() {
             data={rows}
             columns={columns}
             pagination={false}
-            scroll={{ x: 1600 }}
+            scroll={{ x: 1780 }}
             rowSelection={{
               selectedRowKeys: selectedKeys,
               onChange: (keys: (string | number)[]) => setSelectedKeys(keys.map((key) => String(key)))

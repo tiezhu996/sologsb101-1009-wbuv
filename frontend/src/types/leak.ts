@@ -15,6 +15,10 @@ export interface Leak {
   /** 复检浓度（ppm） */
   retestValuePpm: number
   handler: string
+  /** 由旁通作业期越线读数派发时，记录所属作业；平时巡检派发为空 */
+  bypassWorkId?: string
+  /** 来源读数 id：同一读数最多派一张泄漏单（幂等派单键） */
+  sourceReadingId?: string
   createdAt: number
   updatedAt: number
 }
@@ -57,4 +61,9 @@ export function createEmptyLeakDraft(): LeakDraft {
 
 export function retestPassed(value: number): boolean {
   return value > 0 && value <= LEAK_RETEST_PASS_PPM
+}
+
+/** 处置单是否尚未复检闭环 */
+export function isOpenLeak(state: LeakState): boolean {
+  return state !== '已复检'
 }

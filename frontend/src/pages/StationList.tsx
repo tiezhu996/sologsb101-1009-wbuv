@@ -25,6 +25,7 @@ import StatBadge from '@/components/common/StatBadge'
 import { useStationStore } from '@/stores/stationStore'
 import { usePatrolStore } from '@/stores/patrolStore'
 import { useLeakStore } from '@/stores/leakStore'
+import { useBypassStore } from '@/stores/bypassStore'
 import {
   DEVICE_STATES,
   DEVICE_TYPES,
@@ -49,6 +50,7 @@ export default function StationList() {
   const stationStore = useStationStore()
   const patrolStore = usePatrolStore()
   const leakStore = useLeakStore()
+  const bypassStore = useBypassStore()
 
   const [stationForm] = Form.useForm<StationDraft>()
   const [deviceForm] = Form.useForm<DeviceDraft>()
@@ -85,6 +87,9 @@ export default function StationList() {
 
   const missedOf = (stationId: string): number =>
     patrolStore.patrols.filter((patrol) => patrol.stationId === stationId && patrol.state === '漏检').length
+
+  const activeBypassOf = (stationId: string): number =>
+    bypassStore.works.filter((work) => work.stationId === stationId && work.state === '进行中').length
 
   const openCreateStation = (): void => {
     setEditingStationId(null)
@@ -232,6 +237,12 @@ export default function StationList() {
         <StatBadge label="设备" value={stationStore.devices.length} suffix="台" tone="info" />
         <StatBadge label="巡检点位" value={stationStore.pointStats().total} suffix="个" tone="default" />
         <StatBadge label="待处置泄漏" value={leakStore.counts()['待处置']} suffix="单" tone="danger" />
+        <StatBadge
+          label="旁通作业中"
+          value={bypassStore.works.filter((work) => work.state === '进行中').length}
+          suffix="次"
+          tone="warning"
+        />
       </div>
 
       <FilterBar model={model} selects={filterSelects} keywordPlaceholder="搜索站名 / 位置" onModelChange={onModelChange} />
@@ -270,6 +281,9 @@ export default function StationList() {
                     · 待处置泄漏 {openLeakOf(station.id)}
                   </span>
                   <span style={{ color: missedOf(station.id) > 0 ? '#ff7d00' : undefined }}>· 漏检 {missedOf(station.id)}</span>
+                  {activeBypassOf(station.id) > 0 ? (
+                    <span style={{ color: '#722ed1' }}>· 旁通作业中 {activeBypassOf(station.id)}</span>
+                  ) : null}
                 </div>
                 <div className="card-list-item__meta" style={{ gap: 8 }}>
                   <Button

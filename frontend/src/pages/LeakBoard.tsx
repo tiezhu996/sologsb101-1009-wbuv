@@ -196,6 +196,18 @@ export default function LeakBoard() {
       )
     },
     { title: '发现时间', dataIndex: 'foundTime', width: 120 },
+    {
+      title: '来源',
+      width: 130,
+      render: (_value, record) =>
+        record.bypassWorkId ? (
+          <Tag color="purple" size="small">
+            旁通作业越线即派
+          </Tag>
+        ) : (
+          <Tag size="small">巡检异常派单</Tag>
+        )
+    },
     { title: '处置措施', dataIndex: 'measure', width: 240, render: (value: string) => value || '—' },
     {
       title: '状态',

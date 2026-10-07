@@ -10,6 +10,7 @@ import App from '../App'
 const StationList = lazy(() => import('../pages/StationList'))
 const PointConfig = lazy(() => import('../pages/PointConfig'))
 const PatrolEntry = lazy(() => import('../pages/PatrolEntry'))
+const BypassBoard = lazy(() => import('../pages/BypassBoard'))
 const AbnormalBoard = lazy(() => import('../pages/AbnormalBoard'))
 const LeakBoard = lazy(() => import('../pages/LeakBoard'))
 const PlanList = lazy(() => import('../pages/PlanList'))
@@ -18,6 +19,7 @@ export const ROUTES = {
   stations: '/stations',
   points: '/points',
   patrols: '/patrols',
+  bypass: '/bypass',
   abnormal: '/abnormal',
   leaks: '/leaks',
   plans: '/plans'
@@ -40,6 +42,7 @@ export const appRoutes: RouteObject[] = [
       { path: 'stations', element: withSuspense(<StationList />) },
       { path: 'points', element: withSuspense(<PointConfig />) },
       { path: 'patrols', element: withSuspense(<PatrolEntry />) },
+      { path: 'bypass', element: withSuspense(<BypassBoard />) },
       { path: 'abnormal', element: withSuspense(<AbnormalBoard />) },
       { path: 'leaks', element: withSuspense(<LeakBoard />) },
       { path: 'plans', element: withSuspense(<PlanList />) },
